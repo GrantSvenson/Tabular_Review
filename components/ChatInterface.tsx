@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Bot, Send, X, User } from 'lucide-react';
 import { ChatMessage, DocumentFile, Column, ExtractionResult } from '../types';
-import { analyzeDataWithChat } from '../services/geminiService';
+import { analyzeDataWithChat } from '../services/openRouterService';
 
 interface ChatInterfaceProps {
   documents: DocumentFile[];
@@ -32,7 +32,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   }, [messages, isTyping]);
 
   const handleSend = async () => {
-    if (!input.trim()) return;
+    if (!input.trim() || isTyping) return;
 
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
@@ -46,16 +46,10 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setIsTyping(true);
 
     try {
-      // Format history for Gemini
-      const history = messages.map(m => ({
-        role: m.role,
-        parts: [{ text: m.text }]
-      }));
-
       const responseText = await analyzeDataWithChat(
         input,
         { documents, columns, results },
-        history,
+        messages,
         modelId
       );
 
@@ -71,7 +65,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       const errorMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'model',
-        text: "Sorry, I encountered an error processing your request.",
+        text: error instanceof Error ? error.message : 'Unable to analyze the data. Please try again.',
         timestamp: Date.now()
       };
       setMessages(prev => [...prev, errorMsg]);

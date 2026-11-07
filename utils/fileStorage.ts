@@ -1,5 +1,15 @@
 import { SavedProject, ColumnLibrary, ColumnTemplate } from '../types';
 
+declare global {
+  interface Window {
+    showSaveFilePicker?: (options?: object) => Promise<FileSystemFileHandle>;
+    showOpenFilePicker?: (options?: object) => Promise<FileSystemFileHandle[]>;
+  }
+}
+
+const isFileSystemAccessSupported = (): boolean =>
+  typeof window.showSaveFilePicker === 'function' && typeof window.showOpenFilePicker === 'function';
+
 // ============================================
 // Project Save/Load Functions
 // ============================================

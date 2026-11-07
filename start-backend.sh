@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 # Start the Docling backend with MPS (Mac GPU) acceleration
 
 cd "$(dirname "$0")/server"
@@ -6,7 +7,7 @@ cd "$(dirname "$0")/server"
 # Create virtual environment if it doesn't exist
 if [ ! -d "venv" ]; then
     echo "Creating Python virtual environment..."
-    python3 -m venv venv
+    "${PYTHON:-python3}" -m venv venv
 fi
 
 # Activate virtual environment

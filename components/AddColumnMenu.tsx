@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ColumnType, ColumnTemplate } from '../types';
-import { generatePromptHelper } from '../services/geminiService';
+import { generatePromptHelper } from '../services/openRouterService';
 import { addTemplateToLibrary } from '../utils/fileStorage';
 import { 
   X, 
@@ -54,6 +54,7 @@ export const AddColumnMenu: React.FC<AddColumnMenuProps> = ({
   
   const [isTypeMenuOpen, setIsTypeMenuOpen] = useState(false);
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
+  const [promptError, setPromptError] = useState('');
 
   const selectedType = COLUMN_TYPES.find(t => t.type === type) || COLUMN_TYPES[0];
 
@@ -74,11 +75,13 @@ export const AddColumnMenu: React.FC<AddColumnMenuProps> = ({
     if (!name) return;
     
     setIsGeneratingPrompt(true);
+    setPromptError('');
     try {
       const suggestion = await generatePromptHelper(name, type, prompt || undefined, modelId);
       setPrompt(suggestion);
     } catch (e) {
       console.error("Failed to generate prompt", e);
+      setPromptError(e instanceof Error ? e.message : 'Unable to generate a prompt.');
     } finally {
       setIsGeneratingPrompt(false);
     }
@@ -192,6 +195,7 @@ export const AddColumnMenu: React.FC<AddColumnMenuProps> = ({
             </div>
 
             {/* Save to Library Option */}
+            {promptError && <p role="alert" className="text-xs text-red-600">{promptError}</p>}
             <div className="space-y-2 pt-2 border-t border-slate-100">
               <label className="flex items-center gap-2 cursor-pointer group">
                 <input

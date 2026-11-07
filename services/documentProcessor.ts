@@ -1,22 +1,19 @@
 
 
+import { API_URL, readApiResponse } from './api.ts';
+
 export const processDocumentToMarkdown = async (file: File): Promise<string> => {
   try {
     const formData = new FormData();
     formData.append('file', file);
 
     // Send to local backend running Docling
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-    const response = await fetch(`${apiUrl}/convert`, {
+    const response = await fetch(`${API_URL}/convert`, {
       method: 'POST',
       body: formData,
     });
 
-    if (!response.ok) {
-      throw new Error(`Conversion failed: ${response.statusText}`);
-    }
-
-    const data = await response.json();
+    const data = await readApiResponse(response);
     return data.markdown || "";
 
   } catch (error) {

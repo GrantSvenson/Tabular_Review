@@ -4,7 +4,7 @@ import { VerificationSidebar } from './components/VerificationSidebar';
 import { ChatInterface } from './components/ChatInterface';
 import { AddColumnMenu } from './components/AddColumnMenu';
 import { ColumnLibrary } from './components/ColumnLibrary';
-import { extractColumnData } from './services/geminiService';
+import { extractColumnData, DEFAULT_MODEL, normalizeModelId } from './services/openRouterService';
 import { processDocumentToMarkdown } from './services/documentProcessor';
 import { DocumentFile, Column, ExtractionResult, SidebarMode, ColumnType, SavedProject, ColumnTemplate } from './types';
 import { MessageSquare, Table, Square, FilePlus, LayoutTemplate, ChevronDown, Zap, Cpu, Brain, Trash2, Play, Download, WrapText, Loader2, Save, FolderOpen, RefreshCw } from './components/Icons';
@@ -13,9 +13,10 @@ import { saveProject, loadProject } from './utils/fileStorage';
 
 // Available Models
 const MODELS = [
-  { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro', description: 'Deepest Reasoning', icon: Brain },
-  { id: 'gemini-2.5-pro-preview', name: 'Gemini 2.5 Pro', description: 'Balanced', icon: Cpu },
-  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', description: 'Fastest', icon: Zap },
+  { id: DEFAULT_MODEL, name: 'OpenRouter Free', description: 'OpenRouter · Free models', icon: Zap },
+  { id: 'openai/gpt-4.1-mini', name: 'GPT-4.1 Mini', description: 'OpenRouter · Fast', icon: Zap },
+  { id: 'openai/gpt-4.1', name: 'GPT-4.1', description: 'OpenRouter · General purpose', icon: Cpu },
+  { id: 'anthropic/claude-sonnet-4.5', name: 'Claude Sonnet 4.5', description: 'OpenRouter · Detailed analysis', icon: Brain },
 ];
 
 const App: React.FC = () => {
@@ -38,6 +39,8 @@ const App: React.FC = () => {
   // Model State
   const [selectedModel, setSelectedModel] = useState<string>(MODELS[0].id);
   const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
+  const [customModel, setCustomModel] = useState('');
+  const [analysisError, setAnalysisError] = useState('');
 
   // Add/Edit Column Menu State
   const [addColumnAnchor, setAddColumnAnchor] = useState<DOMRect | null>(null);
@@ -98,7 +101,7 @@ const App: React.FC = () => {
         setDocuments(project.documents);
         setResults(project.results);
         if (project.selectedModel) {
-          setSelectedModel(project.selectedModel);
+          setSelectedModel(normalizeModelId(project.selectedModel));
         }
         // Reset UI state
         setSidebarMode('none');
@@ -386,6 +389,7 @@ const App: React.FC = () => {
     const controller = new AbortController();
     abortControllerRef.current = controller;
     setIsProcessing(true);
+    setAnalysisError('');
 
     try {
       // Mark all target columns as extracting initially
@@ -405,10 +409,11 @@ const App: React.FC = () => {
 
       // 2. Process EVERYTHING concurrently (Simultaneous)
       // Removed batching logic as requested to maximize speed
+      const failedColumns = new Set<string>();
       const promises = tasks.map(async ({ doc, col }) => {
           if (controller.signal.aborted) return;
           try {
-              const data = await extractColumnData(doc, col, selectedModel);
+              const data = await extractColumnData(doc, col, selectedModel, controller.signal);
               if (controller.signal.aborted) return;
 
               setResults(prev => ({
@@ -419,6 +424,9 @@ const App: React.FC = () => {
                   }
               }));
           } catch (e) {
+              if (controller.signal.aborted) return;
+              failedColumns.add(col.id);
+              setAnalysisError(e instanceof Error ? e.message : 'Extraction failed. Please try again.');
               console.error(`Failed to extract ${col.name} for ${doc.name}`, e);
           }
       });
@@ -427,7 +435,7 @@ const App: React.FC = () => {
 
       // Mark all columns as completed if finished successfully without abort
       if (!controller.signal.aborted) {
-          setColumns(prev => prev.map(c => colsToProcess.some(target => target.id === c.id) ? { ...c, status: 'completed' } : c));
+          setColumns(prev => prev.map(c => colsToProcess.some(target => target.id === c.id) ? { ...c, status: failedColumns.has(c.id) ? 'error' : 'completed' } : c));
       }
 
     } finally {
@@ -508,7 +516,7 @@ const App: React.FC = () => {
   };
 
   const sidebarData = getSidebarData();
-  const currentModel = MODELS.find(m => m.id === selectedModel) || MODELS[0];
+  const currentModel = MODELS.find(m => m.id === selectedModel) || { id: selectedModel, name: selectedModel, description: 'OpenRouter', icon: Cpu };
 
   // Calculate Sidebar Width
   const getSidebarWidthClass = () => {
@@ -682,7 +690,7 @@ const App: React.FC = () => {
                 {isModelMenuOpen && (
                   <>
                   <div className="fixed inset-0 z-40" onClick={() => setIsModelMenuOpen(false)}></div>
-                  <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-100 p-1 z-50 animate-in fade-in zoom-in-95 duration-100">
+                  <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-xl shadow-xl border border-slate-100 p-1 z-50 animate-in fade-in zoom-in-95 duration-100">
                     {MODELS.map(model => (
                       <button
                         key={model.id}
@@ -703,6 +711,17 @@ const App: React.FC = () => {
                         </div>
                       </button>
                     ))}
+                    <form className="border-t border-slate-100 mt-1 p-2 space-y-2" onSubmit={event => {
+                      event.preventDefault();
+                      if (!/^[^\s/]+\/[^\s]+$/.test(customModel.trim())) return;
+                      setSelectedModel(customModel.trim());
+                      setIsModelMenuOpen(false);
+                    }}>
+                      <label htmlFor="custom-model" className="text-xs font-semibold text-slate-600">Other OpenRouter model</label>
+                      <input id="custom-model" value={customModel} onChange={event => setCustomModel(event.target.value)} placeholder="provider/model-name" required pattern="[^\s/]+/[^\s]+" className="w-full border border-slate-200 rounded px-2 py-1 text-xs" />
+                      <p className="text-[10px] text-slate-500">Choose a model that supports structured outputs.</p>
+                      <button type="submit" className="text-xs text-indigo-700 font-semibold">Use model</button>
+                    </form>
                   </div>
                   </>
                 )}
@@ -739,6 +758,12 @@ const App: React.FC = () => {
              )}
           </div>
         </header>
+        {analysisError && (
+          <div role="alert" className="px-6 py-3 bg-red-50 border-b border-red-200 text-sm text-red-700">
+            {analysisError}
+            <button onClick={() => setAnalysisError('')} className="ml-3 underline">Dismiss</button>
+          </div>
+        )}
 
         {/* Workspace */}
         <main className="flex-1 flex overflow-hidden relative">

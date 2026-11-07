@@ -1,5 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from openrouter import router as openrouter_router
 from docling.document_converter import DocumentConverter
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.datamodel.accelerator_options import AcceleratorDevice, AcceleratorOptions
@@ -11,13 +12,14 @@ import shutil
 import platform
 
 app = FastAPI()
+app.include_router(openrouter_router)
 
 # Configure CORS
 # In production, replace with specific origins
 origins = [
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "http://localhost:5173", # Vite default
+    f"http://{host}:{port}"
+    for host in ("localhost", "127.0.0.1")
+    for port in (3000, 3001, 5173)
 ]
 
 app.add_middleware(
@@ -57,7 +59,7 @@ def create_converter():
 converter = create_converter()
 
 @app.post("/convert")
-async def convert_document(file: UploadFile = File(...)):
+def convert_document(file: UploadFile = File(...)):
     try:
         # Create a temporary file to save the uploaded content
         # Docling needs a file path
@@ -86,4 +88,4 @@ async def convert_document(file: UploadFile = File(...)):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host=os.getenv("HOST", "127.0.0.1"), port=8000)
